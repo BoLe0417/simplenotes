@@ -11,7 +11,10 @@
   <body>
     <aside id="sidebar">
       <div class="brand">📝 SimpleNotes</div>
-      <button id="new-btn" class="primary">+ New note</button>
+      <div class="sidebar-actions">
+        <button id="new-btn" class="primary">+ New note</button>
+        <a id="stats-link" class="button" href="#/stats">📊 Stats</a>
+      </div>
       <input id="search" type="search" placeholder="Search… (press / to focus)" />
       <div id="tags"></div>
       <ul id="note-list"></ul>
@@ -48,7 +51,51 @@
           <article id="edit-preview" class="markdown"></article>
         </div>
       </section>
+      <section id="stats" hidden>
+        <div class="toolbar">
+          <h1>Note Analytics</h1>
+          <div>
+            <button id="save-report-btn" class="primary">Save Report</button>
+          </div>
+        </div>
+        <div id="stats-meta" class="meta"></div>
+
+        <div id="stat-cards" class="stat-cards"></div>
+
+        <h2>Activity <small>notes by last-modified date, last 14 days</small></h2>
+        <div id="activity-chart" class="activity"></div>
+
+        <div class="stats-grid">
+          <div>
+            <h2>Top tags</h2>
+            <ol id="top-tags" class="rank-list"></ol>
+          </div>
+          <div>
+            <h2>Top words</h2>
+            <ol id="top-words" class="rank-list"></ol>
+          </div>
+        </div>
+
+        <h2>Notes by length</h2>
+        <table class="stats-table">
+          <thead>
+            <tr><th>Note</th><th class="num">Words</th><th class="num">Reading time</th></tr>
+          </thead>
+          <tbody id="notes-table"></tbody>
+        </table>
+
+        <h2>Previous Reports</h2>
+        <div id="reports-box" class="reports-box"></div>
+      </section>
     </main>
+
+    <dialog id="report-dialog">
+      <div class="toolbar">
+        <strong id="report-dialog-title"></strong>
+        <div><button id="report-close-btn">Close</button></div>
+      </div>
+      <article id="report-body" class="markdown"></article>
+    </dialog>
 
     <div id="toast" hidden></div>
     <script src="/static/app.js"></script>

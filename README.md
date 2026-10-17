@@ -13,6 +13,10 @@ AWS Academy Sandbox.
 - Full-text search across titles and content (press `/` to jump to the search box)
 - Tags: write `#tag` anywhere in a note, then click the tag in the sidebar to filter
 - Links between notes: write `[[Another Note Title]]`
+- **Note Analytics** (📊 Stats): number of notes, total / average words, reading time,
+  an activity chart for the last 14 days, top tags, top words, and every note ranked by length
+- **Saved reports**: click **Save Report** to save the current statistics as a Markdown file;
+  pick one under **Previous Reports** and click **Show** to open it again
 - Optional username / password login (HTTP Basic Auth)
 - `Ctrl+S` to save; works in dark mode and on mobile screens
 
@@ -30,12 +34,14 @@ AWS Academy Sandbox.
 ```
 simplenotes/
 ├── app/
-│   ├── main.py          # Backend: API routes, file storage, optional login
+│   ├── main.py          # Backend: API routes, file storage, analytics, optional login
 │   └── static/          # Frontend: the web page the user sees
-│       ├── index.html   # Page layout (sidebar, viewer, editor)
+│       ├── index.html   # Page layout (sidebar, viewer, editor, stats page)
 │       ├── app.js       # Page logic: calls the API and updates the page
 │       └── style.css    # Styling
 ├── data/                # Notes are saved here (created automatically, not in Git)
+├── reports/             # Saved analytics reports (created automatically, not in Git)
+├── scripts/             # CloudFormation templates for AWS
 ├── requirements.txt     # Python packages
 └── README.md
 ```
@@ -93,7 +99,8 @@ appears in the `data/` folder.
 
 | Variable       | Default | Meaning                                              |
 | -------------- | ------- | ---------------------------------------------------- |
-| `NOTES_DIR`    | `data`  | Folder where notes are stored                        |
+| `NOTES_DIR`    | `data`  | Folder where notes are stored (relative to the project folder, wherever you start the app) |
+| `REPORTS_DIR`  | `reports` | Folder where analytics reports are stored (relative to the project folder) |
 | `APP_USERNAME` | `admin` | Login username                                       |
 | `APP_PASSWORD` | (empty) | Login password. **If empty, no login is required.**  |
 
@@ -107,6 +114,10 @@ appears in the `data/` folder.
 | PUT    | `/api/notes/{title}`            | Update or rename a note                         |
 | DELETE | `/api/notes/{title}`            | Delete a note                                   |
 | GET    | `/api/tags`                     | List all tags with counts                       |
+| GET    | `/api/stats?tz_offset=480`      | Note analytics (`tz_offset` = minutes ahead of UTC, e.g. 480 for Singapore) |
+| POST   | `/api/reports?tz_offset=480`    | Save the current analytics as a Markdown report |
+| GET    | `/api/reports`                  | List saved reports, newest first                |
+| GET    | `/api/reports/{name}`           | Get one saved report                            |
 | GET    | `/health`                       | Health check (returns `{"status": "ok"}`)       |
 
 Interactive API docs are available at `/docs` while the app is running.
@@ -125,6 +136,7 @@ The app has two halves that talk to each other over HTTP:
 | Settings    | Reads `NOTES_DIR`, `APP_USERNAME`, `APP_PASSWORD` and creates the notes folder |
 | Auth        | `basic_auth` middleware: if a password is set, every request must log in    |
 | Helpers     | `clean_title` blocks unsafe titles, `note_path` turns a title into a file path, `get_tags` finds `#tags`, `note_info` builds the summary shown in the list |
+| Analytics   | `count_words` counts words (each Chinese character counts as one word), `reading_minutes` assumes 200 words per minute, `top_words` skips common words like "the", `build_stats` computes everything on the Stats page, `stats_to_markdown` turns it into a report |
 | API         | One function per route in the API table above                               |
 | Frontend    | `/` returns `index.html`; `/static/...` serves the CSS and JS files          |
 
@@ -137,7 +149,9 @@ The app has two halves that talk to each other over HTTP:
 | `openNote()`  | Fetches one note and shows it, rendered as Markdown            |
 | `openEditor()`| Shows the editor with live preview                             |
 | `save()` / `remove()` | Create / update / delete a note                        |
-| `route()`     | Reads the URL (e.g. `#/note/Hello`) to decide what to show     |
+| `openStats()` | Fetches `/api/stats` and draws the cards, chart, lists and table |
+| `saveReport()` / `showReport()` | Saves a report / opens a saved report in a pop-up |
+| `route()`     | Reads the URL (e.g. `#/note/Hello`, `#/stats`) to decide what to show |
 
 ### Example: what happens when you click "Save"
 
@@ -153,6 +167,32 @@ The app has two halves that talk to each other over HTTP:
    "Saved" message, opens the note and refreshes the sidebar list.
 
 Reading, searching and deleting follow the same pattern: browser → API route → file on disk → reply.
+
+## Storage: where the data lives
+
+Notes and reports are plain Markdown files. The same code works locally and on AWS,
+with no environment-specific setup:
+
+| Where | Notes | Reports | Storage |
+| ----- | ----- | ------- | ------- |
+| Your laptop | `simplenotes/data/` | `simplenotes/reports/` | Local disk |
+| EC2 | `/opt/simplenotes/data/` | `/opt/simplenotes/reports/` | The instance's **EBS** root volume |
+
+**Verify on your laptop:** open 📊 Stats, click **Save Report**, then check that a new
+`notes-report-YYYY-MM-DD_HHMMSS.md` file appears in `reports/`.
+
+**Verify on EC2:** connect to the instance (EC2 → `SimpleNotes Server` → Connect →
+EC2 Instance Connect), then run:
+
+```bash
+df -h /                          # the EBS root volume and its free space
+ls -l /opt/simplenotes/data      # one .md file per note
+ls -l /opt/simplenotes/reports   # one .md file per saved report
+cat /opt/simplenotes/reports/<file name>.md
+```
+
+Because the files are on the instance's EBS volume, **they are deleted together with the stack.**
+Moving them to Amazon S3 would keep them after the stack is deleted.
 
 ## Deploy to AWS (CloudFormation)
 

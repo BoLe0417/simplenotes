@@ -8,7 +8,8 @@ import base64
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -16,8 +17,18 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-NOTES_DIR = Path(os.environ.get("NOTES_DIR", "data")).resolve()
+# Folders are resolved relative to the project root (the folder that contains
+# app/), so the app works the same no matter where it is started from.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+NOTES_DIR = Path(os.environ.get("NOTES_DIR", PROJECT_ROOT / "data")).resolve()
 NOTES_DIR.mkdir(parents=True, exist_ok=True)
+
+# Saved analytics reports (Markdown files), stored on the same disk as notes.
+REPORTS_DIR = Path(
+    os.environ.get("REPORTS_DIR", PROJECT_ROOT / "reports")
+).resolve()
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Optional login. If APP_PASSWORD is empty, the app is open to everyone.
 APP_USERNAME = os.environ.get("APP_USERNAME", "admin")
@@ -180,6 +191,224 @@ def delete_note(title: str):
     if not path.exists():
         raise HTTPException(404, "Note not found.")
     path.unlink()
+
+
+# ---------- Analytics ----------
+
+# A "word" is a run of English letters/digits, or a single Chinese character
+# (Chinese has no spaces, so each character is counted as one word).
+WORD_PATTERN = re.compile(
+    r"[㐀-䶿一-鿿]|[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*"
+)
+WORDS_PER_MINUTE = 200  # typical adult reading speed
+ACTIVITY_DAYS = 14  # how many days the activity chart covers
+TOP_N = 10
+REPORT_NAME = re.compile(r"^[\w-]+\.md$")
+
+# Very common English words that say nothing about a note's topic.
+STOPWORDS = set(
+    """
+    a about above after again all also am an and any are as at be because been
+    before being below between both but by can could did do does doing down
+    during each few for from further had has have having he her here hers him
+    his how i if in into is it its itself just me more most my no nor not now
+    of off on once only or other our ours out over own same she should so some
+    such than that the their theirs them then there these they this those
+    through to too under until up very was we were what when where which while
+    who whom why will with would you your yours
+    """.split()
+)
+
+
+def count_words(content: str) -> int:
+    return len(WORD_PATTERN.findall(content))
+
+
+def reading_minutes(words: int) -> int:
+    """Whole minutes, rounded up; an empty note takes 0 minutes."""
+    return -(-words // WORDS_PER_MINUTE)
+
+
+def top_words(contents: list[str]) -> list[dict]:
+    counter: Counter[str] = Counter()
+    for content in contents:
+        text = TAG_PATTERN.sub(" ", content)  # tags are counted separately
+        for word in WORD_PATTERN.findall(text.lower()):
+            if len(word) >= 3 and word not in STOPWORDS and not word.isdigit():
+                counter[word] += 1
+    return [{"word": w, "count": c} for w, c in counter.most_common(TOP_N)]
+
+
+def to_local(dt: datetime, tz_offset_minutes: int) -> datetime:
+    return dt.astimezone(timezone(timedelta(minutes=tz_offset_minutes)))
+
+
+def build_stats(tz_offset_minutes: int = 0) -> dict:
+    """Compute every statistic shown on the Stats page.
+
+    tz_offset_minutes is the viewer's offset from UTC (e.g. 480 for
+    Singapore), so "per day" counts match the viewer's calendar.
+    """
+    tz_offset_minutes = max(-14 * 60, min(14 * 60, tz_offset_minutes))
+    notes = []
+    tag_counts: Counter[str] = Counter()
+    for path, content in all_notes():
+        info = note_info(path, content)
+        words = count_words(content)
+        notes.append(
+            {
+                "title": info["title"],
+                "words": words,
+                "reading_minutes": reading_minutes(words),
+                "tags": info["tags"],
+                "modified": info["modified"],
+            }
+        )
+        tag_counts.update(info["tags"])
+
+    notes.sort(key=lambda note: note["words"], reverse=True)
+    total_words = sum(note["words"] for note in notes)
+
+    # Notes per day (by last-modified date) for the last ACTIVITY_DAYS days.
+    today = to_local(datetime.now(timezone.utc), tz_offset_minutes).date()
+    days = [today - timedelta(days=i) for i in range(ACTIVITY_DAYS - 1, -1, -1)]
+    per_day = Counter(
+        to_local(
+            datetime.fromisoformat(note["modified"]), tz_offset_minutes
+        ).date()
+        for note in notes
+    )
+
+    return {
+        "generated": to_local(
+            datetime.now(timezone.utc), tz_offset_minutes
+        ).isoformat(timespec="seconds"),
+        "summary": {
+            "notes": len(notes),
+            "words": total_words,
+            "avg_words": round(total_words / len(notes)) if notes else 0,
+            "reading_minutes": reading_minutes(total_words),
+            "tags": len(tag_counts),
+        },
+        "notes": notes,
+        "top_tags": [
+            {"tag": t, "count": c} for t, c in tag_counts.most_common(TOP_N)
+        ],
+        "top_words": top_words([content for _, content in all_notes()]),
+        "activity": [
+            {"date": day.isoformat(), "count": per_day.get(day, 0)}
+            for day in days
+        ],
+    }
+
+
+def stats_to_markdown(stats: dict) -> str:
+    s = stats["summary"]
+    lines = [
+        "# SimpleNotes Analytics Report",
+        "",
+        f"Generated: {stats['generated']}",
+        "",
+        "## Summary",
+        "",
+        "| Metric | Value |",
+        "| --- | --- |",
+        f"| Notes | {s['notes']} |",
+        f"| Total words | {s['words']} |",
+        f"| Average words per note | {s['avg_words']} |",
+        f"| Total reading time | {s['reading_minutes']} min |",
+        f"| Distinct tags | {s['tags']} |",
+        "",
+        "## Notes by length",
+        "",
+        "| Note | Words | Reading time |",
+        "| --- | --- | --- |",
+    ]
+    lines += [
+        f"| {n['title']} | {n['words']} | {n['reading_minutes']} min |"
+        for n in stats["notes"]
+    ] or ["| (no notes) | | |"]
+
+    lines += ["", "## Top tags", ""]
+    lines += [f"- #{t['tag']} ({t['count']})" for t in stats["top_tags"]] or [
+        "No tags yet."
+    ]
+    lines += ["", "## Top words", ""]
+    lines += [f"- {w['word']} ({w['count']})" for w in stats["top_words"]] or [
+        "No words yet."
+    ]
+    lines += [
+        "",
+        f"## Activity (notes by last-modified date, last {ACTIVITY_DAYS} days)",
+        "",
+        "| Date | Notes |",
+        "| --- | --- |",
+    ]
+    lines += [f"| {d['date']} | {d['count']} |" for d in stats["activity"]]
+    return "\n".join(lines) + "\n"
+
+
+def report_path(name: str) -> Path:
+    if not REPORT_NAME.match(name):
+        raise HTTPException(400, "Invalid report name.")
+    path = (REPORTS_DIR / name).resolve()
+    if path.parent != REPORTS_DIR:
+        raise HTTPException(400, "Invalid report name.")
+    return path
+
+
+@app.get("/api/stats")
+def get_stats(tz_offset: int = 0):
+    """Statistics about all notes. `tz_offset` = viewer's minutes ahead of UTC."""
+    return build_stats(tz_offset)
+
+
+@app.post("/api/reports", status_code=201)
+def save_report(tz_offset: int = 0):
+    """Compute the current statistics and save them as a Markdown report."""
+    stats = build_stats(tz_offset)
+    stamp = datetime.fromisoformat(stats["generated"]).strftime(
+        "%Y-%m-%d_%H%M%S"
+    )
+    path = REPORTS_DIR / f"notes-report-{stamp}.md"
+    number = 2
+    while path.exists():  # never overwrite an earlier report
+        path = REPORTS_DIR / f"notes-report-{stamp}-{number}.md"
+        number += 1
+    try:
+        path.write_text(stats_to_markdown(stats), encoding="utf-8")
+    except OSError as err:
+        raise HTTPException(500, f"Could not save the report: {err}") from err
+    return {"name": path.name}
+
+
+@app.get("/api/reports")
+def list_reports():
+    """Saved reports, newest first."""
+    paths = sorted(
+        REPORTS_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    return [
+        {
+            "name": p.name,
+            "created": datetime.fromtimestamp(
+                p.stat().st_mtime, timezone.utc
+            ).isoformat(),
+        }
+        for p in paths
+    ]
+
+
+@app.get("/api/reports/{name}")
+def get_report(name: str):
+    path = report_path(name)
+    if not path.exists():
+        raise HTTPException(404, "Report not found.")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as err:
+        raise HTTPException(500, f"Could not read the report: {err}") from err
+    return {"name": name, "content": content}
 
 
 # ---------- Frontend ----------
