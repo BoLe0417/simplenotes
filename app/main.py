@@ -70,6 +70,17 @@ async def basic_auth(request: Request, call_next):
     )
 
 
+@app.middleware("http")
+async def revalidate_frontend(request: Request, call_next):
+    """Ask browsers to check for a newer page, CSS and JS on every load,
+    so everyone sees the latest version right after an update."""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ---------- Helpers ----------
 
 
