@@ -58,6 +58,24 @@ function show(section) {
   $("research-link").classList.toggle("active", section === "research");
 }
 
+// The page already shows the title, so skip a first "# Title" line that repeats it.
+function withoutTitleHeading(note) {
+  const [first, ...rest] = note.content.split("\n");
+  return first.trim() === `# ${note.title}` ? rest.join("\n") : note.content;
+}
+
+// Plain-text preview for the sidebar: drop Markdown symbols and a first
+// heading that only repeats the note title.
+function previewText(note) {
+  return note.snippet
+    .replace(/^#\s+(.*)$/m, (line, heading) => (heading.trim() === note.title ? "" : heading))
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/[#*_>`[\]]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 async function loadList() {
   const params = new URLSearchParams({ q: state.query, tag: state.tag });
   const [notes, tags] = await Promise.all([
@@ -79,7 +97,7 @@ async function loadList() {
           <li class="${note.title === state.current?.title ? "active" : ""}">
             <a href="#/note/${encodeURIComponent(note.title)}">
               <strong>${escapeHtml(note.title)}</strong>
-              <span>${escapeHtml(note.snippet.slice(0, 60)) || "<em>Empty note</em>"}</span>
+              <span>${escapeHtml(previewText(note)) || "<em>Empty note</em>"}</span>
             </a>
           </li>`,
         )
@@ -94,7 +112,7 @@ async function openNote(title) {
     $("view-title").textContent = note.title;
     $("view-meta").textContent =
       "Last modified: " + new Date(note.modified).toLocaleString();
-    $("view-body").innerHTML = renderMarkdown(note.content);
+    $("view-body").innerHTML = renderMarkdown(withoutTitleHeading(note));
     show("viewer");
   } catch (err) {
     toast(err.message);
