@@ -51,8 +51,11 @@ function toast(message) {
 }
 
 function show(section) {
-  for (const id of ["empty", "viewer", "editor", "stats"]) $(id).hidden = id !== section;
+  for (const id of ["empty", "viewer", "editor", "stats", "research"]) {
+    $(id).hidden = id !== section;
+  }
   $("stats-link").classList.toggle("active", section === "stats");
+  $("research-link").classList.toggle("active", section === "research");
 }
 
 async function loadList() {
@@ -278,9 +281,67 @@ async function saveReport() {
   }
 }
 
+// ---------- Research (Wikipedia) ----------
+
+function openResearch() {
+  state.current = null;
+  show("research");
+  loadList();
+  $("wiki-query").focus();
+}
+
+function renderWikiResults(results) {
+  $("wiki-results").innerHTML = results.length
+    ? results
+        .map(
+          (r) => `
+          <li class="wiki-result">
+            <div class="wiki-text">
+              <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener"><strong>${escapeHtml(r.title)}</strong></a>
+              ${r.description ? `<span class="wiki-desc">${escapeHtml(r.description)}</span>` : ""}
+              <p>${escapeHtml(r.excerpt)}…</p>
+            </div>
+            <button class="wiki-save" data-title="${escapeHtml(r.title)}">Save as note</button>
+          </li>`,
+        )
+        .join("")
+    : `<li class="none">No articles found. Try different words.</li>`;
+}
+
+async function searchWiki(event) {
+  event.preventDefault();
+  const query = $("wiki-query").value.trim();
+  if (!query) return;
+  $("wiki-results").innerHTML = `<li class="none">Searching Wikipedia…</li>`;
+  try {
+    const results = await api("GET", `/api/wiki/search?${new URLSearchParams({ q: query })}`);
+    renderWikiResults(results);
+  } catch (err) {
+    $("wiki-results").innerHTML = `<li class="none">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function importWiki(button) {
+  button.disabled = true;
+  button.textContent = "Saving…";
+  try {
+    const note = await api("POST", "/api/wiki/import", { title: button.dataset.title });
+    toast(`Saved as note: ${note.title}`);
+    location.hash = `#/note/${encodeURIComponent(note.title)}`;
+  } catch (err) {
+    toast(err.message);
+    button.disabled = false;
+    button.textContent = "Save as note";
+  }
+}
+
 function route() {
   if (location.hash === "#/stats") {
     openStats();
+    return;
+  }
+  if (location.hash === "#/research") {
+    openResearch();
     return;
   }
   const match = location.hash.match(/^#\/note\/(.+)$/);
@@ -299,6 +360,11 @@ $("new-btn").onclick = () => openEditor(null);
 $("edit-btn").onclick = () => openEditor(state.current);
 $("delete-btn").onclick = remove;
 $("save-report-btn").onclick = saveReport;
+$("wiki-form").onsubmit = searchWiki;
+$("wiki-results").onclick = (e) => {
+  const button = e.target.closest(".wiki-save");
+  if (button) importWiki(button);
+};
 $("report-close-btn").onclick = () => $("report-dialog").close();
 $("save-btn").onclick = save;
 $("cancel-btn").onclick = () =>

@@ -11,8 +11,9 @@
   <body>
     <aside id="sidebar">
       <div class="brand">📝 SimpleNotes</div>
+      <button id="new-btn" class="primary">+ New note</button>
       <div class="sidebar-actions">
-        <button id="new-btn" class="primary">+ New note</button>
+        <a id="research-link" class="button" href="#/research">🔎 Research</a>
         <a id="stats-link" class="button" href="#/stats">📊 Stats</a>
       </div>
       <input id="search" type="search" placeholder="Search… (press / to focus)" />
@@ -51,6 +52,27 @@
           <article id="edit-preview" class="markdown"></article>
         </div>
       </section>
+      <section id="research" hidden>
+        <div class="toolbar">
+          <h1>Research</h1>
+        </div>
+        <div class="meta">Search Wikipedia and save any article as a note.</div>
+        <form id="wiki-form" class="wiki-form">
+          <input
+            id="wiki-query"
+            type="search"
+            placeholder="Search Wikipedia, e.g. cloud computing"
+            aria-label="Search Wikipedia"
+          />
+          <button type="submit" class="primary">Search</button>
+        </form>
+        <ul id="wiki-results" class="wiki-results"></ul>
+        <p class="muted">
+          Data from <a href="https://en.wikipedia.org" target="_blank" rel="noopener">Wikipedia</a>
+          (CC BY-SA). Each saved note keeps a link to its source article.
+        </p>
+      </section>
+
       <section id="stats" hidden>
         <div class="toolbar">
           <h1>Note Analytics</h1>

@@ -254,8 +254,75 @@ button.danger {
   gap: 8px;
 }
 
-.sidebar-actions #new-btn {
+.sidebar-actions a.button {
   flex: 1;
+  text-align: center;
+}
+
+/* ---------- Research ---------- */
+
+.wiki-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.wiki-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.wiki-results {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.wiki-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.wiki-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.wiki-text a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.wiki-desc {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.wiki-text p {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.wiki-save {
+  flex-shrink: 0;
+}
+
+.wiki-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.muted a {
+  color: var(--accent);
 }
 
 a.button {
@@ -522,5 +589,10 @@ a.button.active {
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wiki-result {
+    flex-direction: column;
+    gap: 8px;
   }
 }

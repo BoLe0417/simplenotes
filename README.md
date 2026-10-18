@@ -17,6 +17,8 @@ AWS Academy Sandbox.
   an activity chart for the last 14 days, top tags, top words, and every note ranked by length
 - **Saved reports**: click **Save Report** to save the current statistics as a Markdown file;
   pick one under **Previous Reports** and click **Show** to open it again
+- **Research** (🔎): search Wikipedia from inside the app and click **Save as note** to turn an
+  article summary into a note, with a link back to the source and the tags `#wikipedia #research`
 - Optional username / password login (HTTP Basic Auth)
 - `Ctrl+S` to save; works in dark mode and on mobile screens
 
@@ -27,6 +29,7 @@ AWS Academy Sandbox.
 | Backend  | Python 3.10+, FastAPI, Uvicorn                                             |
 | Frontend | Plain HTML / CSS / JavaScript (marked.js for Markdown, DOMPurify for safety) |
 | Storage  | Markdown files on the local file system                                    |
+| External data | Wikipedia REST API (free, no API key), called with Python's built-in `urllib` |
 | Hosting  | AWS EC2 (deployed with CloudFormation)                                     |
 
 ## Project Structure
@@ -118,6 +121,8 @@ appears in the `data/` folder.
 | POST   | `/api/reports?tz_offset=480`    | Save the current analytics as a Markdown report |
 | GET    | `/api/reports`                  | List saved reports, newest first                |
 | GET    | `/api/reports/{name}`           | Get one saved report                            |
+| GET    | `/api/wiki/search?q=word`       | Search English Wikipedia (title, description, excerpt, link) |
+| POST   | `/api/wiki/import`              | Save a Wikipedia article as a note: `{"title": "Cloud computing"}` |
 | GET    | `/health`                       | Health check (returns `{"status": "ok"}`)       |
 
 Interactive API docs are available at `/docs` while the app is running.
@@ -137,6 +142,7 @@ The app has two halves that talk to each other over HTTP:
 | Auth        | `basic_auth` middleware: if a password is set, every request must log in    |
 | Helpers     | `clean_title` blocks unsafe titles, `note_path` turns a title into a file path, `get_tags` finds `#tags`, `note_info` builds the summary shown in the list |
 | Analytics   | `count_words` counts words (each Chinese character counts as one word), `reading_minutes` assumes 200 words per minute, `top_words` skips common words like "the", `build_stats` computes everything on the Stats page, `stats_to_markdown` turns it into a report |
+| Research    | `wiki_get` calls the Wikipedia API (with a User-Agent, as Wikimedia asks), `strip_html` cleans the search excerpts, `safe_note_title` removes characters a file name cannot hold (e.g. `AC/DC` becomes `AC-DC`), `wiki_note_content` builds the Markdown note |
 | API         | One function per route in the API table above                               |
 | Frontend    | `/` returns `index.html`; `/static/...` serves the CSS and JS files          |
 
@@ -151,6 +157,7 @@ The app has two halves that talk to each other over HTTP:
 | `save()` / `remove()` | Create / update / delete a note                        |
 | `openStats()` | Fetches `/api/stats` and draws the cards, chart, lists and table |
 | `saveReport()` / `showReport()` | Saves a report / opens a saved report in a pop-up |
+| `searchWiki()` / `importWiki()` | Searches Wikipedia / saves a result as a note and opens it |
 | `route()`     | Reads the URL (e.g. `#/note/Hello`, `#/stats`) to decide what to show |
 
 ### Example: what happens when you click "Save"
@@ -193,6 +200,22 @@ cat /opt/simplenotes/reports/<file name>.md
 
 Because the files are on the instance's EBS volume, **they are deleted together with the stack.**
 Moving them to Amazon S3 would keep them after the stack is deleted.
+
+## External data: Wikipedia
+
+The **Research** page uses Wikipedia's free public API. No account or API key is needed.
+
+1. The browser sends the search words to our backend (`GET /api/wiki/search`).
+2. The backend asks Wikipedia: `https://en.wikipedia.org/w/rest.php/v1/search/page?q=...`
+3. When you click **Save as note**, the backend fetches the article summary from
+   `https://en.wikipedia.org/api/rest_v1/page/summary/<title>` and saves it as a Markdown note
+   in the same notes folder, so it shows up in the note list, search, tags and Stats.
+
+The browser never calls Wikipedia directly; the server does. On AWS this works because the EC2
+instance is in a public subnet with a route to the Internet Gateway. If Wikipedia cannot be
+reached, the page shows "Could not reach Wikipedia" instead of crashing.
+
+Wikipedia text is licensed under CC BY-SA; every imported note keeps a link to its source article.
 
 ## Deploy to AWS (CloudFormation)
 

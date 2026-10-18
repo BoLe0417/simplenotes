@@ -5,9 +5,14 @@ Every note is a plain Markdown file in NOTES_DIR. The file name (without
 """
 
 import base64
+import html
+import json
 import os
 import re
 import secrets
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -409,6 +414,124 @@ def get_report(name: str):
     except OSError as err:
         raise HTTPException(500, f"Could not read the report: {err}") from err
     return {"name": name, "content": content}
+
+
+# ---------- Research: Wikipedia ----------
+
+# Wikipedia's free public API: no API key needed. Wikimedia asks every client
+# to send a User-Agent that says who is calling.
+WIKI_BASE = "https://en.wikipedia.org"
+WIKI_USER_AGENT = (
+    "SimpleNotes/1.0 (DS600 student project; "
+    "https://github.com/tianjiaoma2026-lab/simplenotes)"
+)
+WIKI_TIMEOUT_SECONDS = 10
+HTML_TAG = re.compile(r"<[^>]+>")
+
+
+class WikiImport(BaseModel):
+    title: str
+
+
+def wiki_get(path: str, params: dict | None = None) -> dict:
+    """Call the Wikipedia API and return the JSON reply as a dict."""
+    url = WIKI_BASE + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": WIKI_USER_AGENT, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(
+            request, timeout=WIKI_TIMEOUT_SECONDS
+        ) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            raise HTTPException(404, "Wikipedia article not found.") from err
+        raise HTTPException(
+            502, f"Wikipedia returned an error ({err.code})."
+        ) from err
+    except (urllib.error.URLError, TimeoutError, ValueError) as err:
+        raise HTTPException(
+            502, "Could not reach Wikipedia. Check the internet connection."
+        ) from err
+
+
+def strip_html(text: str | None) -> str:
+    """Remove HTML tags (e.g. search highlights) and decode &quot; etc."""
+    return html.unescape(HTML_TAG.sub("", text or "")).strip()
+
+
+def wiki_page_url(key: str) -> str:
+    return f"{WIKI_BASE}/wiki/{urllib.parse.quote(key)}"
+
+
+def safe_note_title(title: str) -> str:
+    """Wikipedia titles may contain characters a file name cannot (e.g. "/")."""
+    title = INVALID_TITLE_CHARS.sub("-", title).strip().lstrip(".")
+    return title[:100] or "Wikipedia article"
+
+
+def wiki_note_content(summary: dict, title: str) -> str:
+    """Turn a Wikipedia page summary into a Markdown note."""
+    url = (
+        summary.get("content_urls", {}).get("desktop", {}).get("page")
+        or wiki_page_url(title.replace(" ", "_"))
+    )
+    lines = [f"# {title}", ""]
+    if summary.get("description"):
+        lines += [f"*{summary['description']}*", ""]
+    lines += [
+        summary.get("extract") or "No summary available.",
+        "",
+        "---",
+        f"Source: [Wikipedia - {title}]({url}) "
+        f"(imported {datetime.now(timezone.utc).date().isoformat()})",
+        "",
+        "#wikipedia #research",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+@app.get("/api/wiki/search")
+def wiki_search(q: str, limit: int = 10):
+    """Search English Wikipedia. Returns titles, short descriptions and
+    a plain-text excerpt for each match."""
+    q = q.strip()
+    if not q:
+        raise HTTPException(400, "Type something to search for.")
+    limit = max(1, min(20, limit))
+    data = wiki_get("/w/rest.php/v1/search/page", {"q": q, "limit": limit})
+    return [
+        {
+            "title": page["title"],
+            "key": page["key"],
+            "description": page.get("description") or "",
+            "excerpt": strip_html(page.get("excerpt")),
+            "url": wiki_page_url(page["key"]),
+        }
+        for page in data.get("pages", [])
+    ]
+
+
+@app.post("/api/wiki/import", status_code=201)
+def wiki_import(item: WikiImport):
+    """Fetch a Wikipedia article summary and save it as a new note."""
+    key = item.title.strip().replace(" ", "_")
+    if not key:
+        raise HTTPException(400, "Article title cannot be empty.")
+    summary = wiki_get(
+        "/api/rest_v1/page/summary/" + urllib.parse.quote(key, safe="")
+    )
+    title = safe_note_title(summary.get("title") or item.title)
+    path = note_path(title)
+    if path.exists():
+        raise HTTPException(409, f'A note called "{title}" already exists.')
+    content = wiki_note_content(summary, title)
+    path.write_text(content, encoding="utf-8")
+    return {**note_info(path, content), "content": content}
 
 
 # ---------- Frontend ----------
