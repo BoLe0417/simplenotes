@@ -102,8 +102,8 @@ appears in the `data/` folder.
 
 | Variable       | Default | Meaning                                              |
 | -------------- | ------- | ---------------------------------------------------- |
-| `NOTES_DIR`    | `data`  | Folder where notes are stored (relative to the project folder, wherever you start the app) |
-| `REPORTS_DIR`  | `reports` | Folder where analytics reports are stored (relative to the project folder) |
+| `NOTES_DIR`    | `data`  | Folder where notes are stored (relative paths are resolved from the project folder) |
+| `REPORTS_DIR`  | `reports` | Folder where analytics reports are stored (relative paths are resolved from the project folder) |
 | `APP_USERNAME` | `admin` | Login username                                       |
 | `APP_PASSWORD` | (empty) | Login password. **If empty, no login is required.**  |
 
