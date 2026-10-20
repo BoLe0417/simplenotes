@@ -16,7 +16,12 @@
   </head>
   <body>
     <aside id="sidebar">
-      <a class="brand" href="#"><span>SimpleNotes</span></a>
+      <a class="brand" href="#">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z" /><path d="M9 12h6M9 16h4" /></svg>
+        </span>
+        <span class="brand-name">SimpleNotes</span>
+      </a>
       <button id="new-btn" class="primary">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
         New note
@@ -31,26 +36,51 @@
           Stats
         </a>
       </nav>
-      <input id="search" type="search" placeholder="Search notes (press /)" aria-label="Search notes" />
+      <label class="search-box">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+        <input id="search" type="search" placeholder="Search notes" aria-label="Search notes" />
+        <kbd>/</kbd>
+      </label>
       <div id="tags"></div>
+      <div class="list-head"><span>Notes</span><span id="note-count"></span></div>
       <ul id="note-list"></ul>
     </aside>
 
     <main id="main">
       <div id="empty" class="empty">
+        <div class="empty-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z" /><path d="M14 3v5h5M9 13h7M9 17h5" /></svg>
+        </div>
         <h2>Pick a note to read</h2>
         <p>Choose one from the list, write a new one, or bring in an article from Research.</p>
+        <div class="empty-actions">
+          <button id="empty-new-btn" class="primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            New note
+          </button>
+          <a class="button" href="#/research">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+            Research
+          </a>
+        </div>
+        <p class="empty-tip">Tip: press <kbd>/</kbd> to search, <kbd>Ctrl</kbd> + <kbd>S</kbd> to save.</p>
       </div>
 
       <section id="viewer" hidden>
         <div class="toolbar">
           <h1 id="view-title"></h1>
           <div>
-            <button id="edit-btn">Edit</button>
-            <button id="delete-btn" class="danger">Delete</button>
+            <button id="edit-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>
+              Edit
+            </button>
+            <button id="delete-btn" class="danger">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+              Delete
+            </button>
           </div>
         </div>
-        <div id="view-meta" class="meta"></div>
+        <div id="view-meta" class="meta note-meta"></div>
         <article id="view-body" class="markdown"></article>
       </section>
 
@@ -58,16 +88,25 @@
         <div class="toolbar">
           <input id="edit-title" placeholder="Title" />
           <div>
-            <button id="save-btn" class="primary">Save</button>
+            <button id="save-btn" class="primary">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7" /></svg>
+              Save
+            </button>
             <button id="cancel-btn">Cancel</button>
           </div>
         </div>
         <div class="edit-panes">
-          <textarea
-            id="edit-content"
-            placeholder="Write in Markdown… Use #tag to add tags, and [[Note Title]] to link to another note"
-          ></textarea>
-          <article id="edit-preview" class="markdown"></article>
+          <div class="pane">
+            <div class="pane-label"><span>Markdown</span><span id="edit-count"></span></div>
+            <textarea
+              id="edit-content"
+              placeholder="Write in Markdown… Use #tag to add tags, and [[Note Title]] to link to another note"
+            ></textarea>
+          </div>
+          <div class="pane">
+            <div class="pane-label"><span>Preview</span></div>
+            <article id="edit-preview" class="markdown"></article>
+          </div>
         </div>
       </section>
       <section id="research" hidden>
@@ -76,6 +115,7 @@
         </div>
         <div class="meta">Search Wikipedia and save any article as a note.</div>
         <form id="wiki-form" class="wiki-form">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
           <input
             id="wiki-query"
             type="search"
@@ -102,30 +142,39 @@
 
         <div id="stat-cards" class="stat-cards"></div>
 
-        <h2>Activity <small>Notes by last-modified date, last 14 days</small></h2>
-        <div id="activity-chart" class="activity"></div>
+        <section class="panel">
+          <header class="panel-head">
+            <h2>Activity <small>Notes by last-modified date, last 14 days</small></h2>
+            <p id="activity-summary" class="panel-note"></p>
+          </header>
+          <div id="activity-chart" class="activity"></div>
+        </section>
 
         <div class="stats-grid">
-          <div>
-            <h2>Top tags</h2>
+          <section class="panel">
+            <header class="panel-head"><h2>Top tags</h2></header>
             <ol id="top-tags" class="rank-list"></ol>
-          </div>
-          <div>
-            <h2>Top words</h2>
+          </section>
+          <section class="panel">
+            <header class="panel-head"><h2>Top words</h2></header>
             <ol id="top-words" class="rank-list"></ol>
-          </div>
+          </section>
         </div>
 
-        <h2>Notes by length</h2>
-        <table class="stats-table">
-          <thead>
-            <tr><th>Note</th><th class="num">Words</th><th class="num">Reading time</th></tr>
-          </thead>
-          <tbody id="notes-table"></tbody>
-        </table>
+        <section class="panel">
+          <header class="panel-head"><h2>Notes by length</h2></header>
+          <table class="stats-table">
+            <thead>
+              <tr><th class="rank">#</th><th>Note</th><th class="length">Words</th><th class="num">Reading time</th><th class="num">Last edited</th></tr>
+            </thead>
+            <tbody id="notes-table"></tbody>
+          </table>
+        </section>
 
-        <h2>Previous reports</h2>
-        <div id="reports-box" class="reports-box"></div>
+        <section class="panel">
+          <header class="panel-head"><h2>Previous reports</h2></header>
+          <div id="reports-box" class="reports-box"></div>
+        </section>
       </section>
     </main>
 
