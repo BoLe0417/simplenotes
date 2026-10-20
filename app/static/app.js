@@ -58,6 +58,10 @@ function show(section) {
   $("research-link").classList.toggle("active", section === "research");
 }
 
+// Same word rule as the server: English words/numbers, or one Chinese character.
+const WORD_PATTERN = /[\u3400-\u4dbf\u4e00-\u9fff]|[A-Za-z0-9]+(?:['\u2019-][A-Za-z0-9]+)*/g;
+const countWords = (text) => (text.match(WORD_PATTERN) || []).length;
+
 // The page already shows the title, so skip a first "# Title" line that repeats it.
 function withoutTitleHeading(note) {
   const [first, ...rest] = note.content.split("\n");
@@ -90,6 +94,7 @@ async function loadList() {
     )
     .join("");
 
+  $("note-count").textContent = notes.length;
   $("note-list").innerHTML = notes.length
     ? notes
         .map(
@@ -97,12 +102,17 @@ async function loadList() {
           <li class="${note.title === state.current?.title ? "active" : ""}">
             <a href="#/note/${encodeURIComponent(note.title)}">
               <strong>${escapeHtml(note.title)}</strong>
-              <span>${escapeHtml(previewText(note)) || "<em>Empty note</em>"}</span>
+              <span class="note-snippet">${escapeHtml(previewText(note)) || "<em>Empty note</em>"}</span>
+              <span class="note-info">
+                <time>${timeAgo(note.modified)}</time>
+                ${note.tags.slice(0, 2).map((t) => `<i>#${escapeHtml(t)}</i>`).join("")}
+                ${note.tags.length > 2 ? `<i>+${note.tags.length - 2}</i>` : ""}
+              </span>
             </a>
           </li>`,
         )
         .join("")
-    : `<li class="none">No notes found</li>`;
+    : `<li class="none">${state.query || state.tag ? "No notes match your search" : "No notes yet"}</li>`;
 }
 
 async function openNote(title) {
@@ -110,8 +120,7 @@ async function openNote(title) {
     const note = await api("GET", noteUrl(title));
     state.current = note;
     $("view-title").textContent = note.title;
-    $("view-meta").textContent =
-      "Last modified: " + new Date(note.modified).toLocaleString();
+    renderNoteMeta(note);
     $("view-body").innerHTML = renderMarkdown(withoutTitleHeading(note));
     show("viewer");
   } catch (err) {
@@ -122,11 +131,33 @@ async function openNote(title) {
   loadList();
 }
 
+function renderNoteMeta(note) {
+  const words = countWords(note.content);
+  const minutes = Math.ceil(words / 200);
+  const edited = new Date(note.modified).toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  $("view-meta").innerHTML = `
+    <span title="Last modified">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></svg>
+      ${escapeHtml(edited)}
+    </span>
+    <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5h16v2M12 5v14M9 19h6" /></svg>${words.toLocaleString()} words</span>
+    <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>${minutes} min read</span>
+    ${note.tags.map((t) => `<button class="meta-tag" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`).join("")}`;
+}
+
+function updateEditCount() {
+  const words = countWords($("edit-content").value);
+  $("edit-count").textContent = `${words.toLocaleString()} word${words === 1 ? "" : "s"}`;
+}
+
 function openEditor(note) {
   state.current = note;
   $("edit-title").value = note ? note.title : "";
   $("edit-content").value = note ? note.content : "";
   $("edit-preview").innerHTML = renderMarkdown($("edit-content").value);
+  updateEditCount();
   show("editor");
   (note ? $("edit-content") : $("edit-title")).focus();
 }
@@ -170,35 +201,64 @@ const tzOffset = () => -new Date().getTimezoneOffset();
 const formatDate = (iso, options) =>
   new Date(iso).toLocaleString(undefined, options);
 
-function renderStatCards(summary) {
+const ICONS = {
+  notes: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/>',
+  words: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/>',
+  avg: '<path d="M4 19h16M7 16V9M12 16V5M17 16v-4"/>',
+  time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  tags: '<path d="M4 4h7l9 9-7 7-9-9z"/><circle cx="8.5" cy="8.5" r="1.2"/>',
+};
+const icon = (name) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
+function renderStatCards(stats) {
+  const { summary, notes, activity } = stats;
+  const recent = activity.reduce((sum, d) => sum + d.count, 0);
+  const longest = notes[0];
   const cards = [
-    ["Notes", summary.notes],
-    ["Total words", summary.words.toLocaleString()],
-    ["Avg words / note", summary.avg_words.toLocaleString()],
-    ["Total reading time", `${summary.reading_minutes} min`],
-    ["Distinct tags", summary.tags],
+    ["notes", "Notes", summary.notes, `${recent} edited in 14 days`],
+    ["words", "Total words", summary.words.toLocaleString(), longest ? `Longest: ${longest.title}` : "No notes yet"],
+    ["avg", "Avg words / note", summary.avg_words.toLocaleString(), longest ? `Max ${plural(longest.words, "word")}` : ""],
+    ["time", "Total reading time", `${summary.reading_minutes} min`, "Reading at 200 words/min"],
+    ["tags", "Distinct tags", summary.tags, stats.top_tags[0] ? `Most used: #${stats.top_tags[0].tag}` : "Add #tags to notes"],
   ];
   $("stat-cards").innerHTML = cards
     .map(
-      ([label, value]) =>
-        `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`,
+      ([key, label, value, hint]) => `
+        <div class="stat-card stat-${key}">
+          <span class="stat-icon">${icon(key)}</span>
+          <span class="stat-label">${label}</span>
+          <strong>${escapeHtml(String(value))}</strong>
+          <small title="${escapeHtml(hint)}">${escapeHtml(hint)}</small>
+        </div>`,
     )
     .join("");
 }
 
 function renderActivity(activity) {
   const max = Math.max(1, ...activity.map((d) => d.count));
+  const total = activity.reduce((sum, d) => sum + d.count, 0);
+  const activeDays = activity.filter((d) => d.count).length;
+  const busiest = activity.reduce((a, b) => (b.count > a.count ? b : a), activity[0]);
+  const longDate = (iso) =>
+    new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  $("activity-summary").innerHTML = total
+    ? `<strong>${plural(total, "note")}</strong> on ${plural(activeDays, "day")} · busiest: ${escapeHtml(longDate(busiest.date))}`
+    : "No edits in the last 14 days";
+
   $("activity-chart").innerHTML = activity
-    .map((d) => {
+    .map((d, i) => {
       const day = new Date(d.date + "T00:00:00");
-      const label = day.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-      const tip = `${label}: ${d.count} note${d.count === 1 ? "" : "s"}`;
-      const height = d.count ? Math.max(4, (d.count / max) * 100) : 0;
+      const tip = `${longDate(d.date)}: ${plural(d.count, "note")}`;
+      const height = d.count ? Math.max(6, (d.count / max) * 100) : 0;
+      const isToday = i === activity.length - 1;
+      const weekday = day.toLocaleDateString(undefined, { weekday: "narrow" });
       return `
-        <div class="activity-col" title="${tip}" aria-label="${tip}">
+        <div class="activity-col${isToday ? " today" : ""}${d.count ? "" : " zero"}" title="${tip}" aria-label="${tip}">
           <span class="activity-value">${d.count || ""}</span>
           <div class="activity-track"><div class="activity-bar" style="height:${height}%"></div></div>
-          <span class="activity-label">${day.getDate()}</span>
+          <span class="activity-label"><b>${day.getDate()}</b>${isToday ? "Today" : weekday}</span>
         </div>`;
     })
     .join("");
@@ -209,8 +269,9 @@ function renderRankList(id, items, format) {
   $(id).innerHTML = items.length
     ? items
         .map(
-          (item) => `
+          (item, i) => `
           <li>
+            <span class="rank-pos">${i + 1}</span>
             <span class="rank-name">${escapeHtml(format(item))}</span>
             <span class="rank-bar"><span style="width:${(item.count / max) * 100}%"></span></span>
             <span class="rank-count">${item.count}</span>
@@ -220,19 +281,36 @@ function renderRankList(id, items, format) {
     : `<li class="none">Nothing yet</li>`;
 }
 
+function timeAgo(iso) {
+  const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days} days ago`;
+  return formatDate(iso, { year: "numeric", month: "short", day: "numeric" });
+}
+
 function renderNotesTable(notes) {
+  const max = Math.max(1, ...notes.map((n) => n.words));
   $("notes-table").innerHTML = notes.length
     ? notes
         .map(
-          (n) => `
+          (n, i) => `
           <tr>
-            <td><a href="#/note/${encodeURIComponent(n.title)}">${escapeHtml(n.title)}</a></td>
-            <td class="num">${n.words.toLocaleString()}</td>
+            <td class="rank">${i + 1}</td>
+            <td>
+              <a href="#/note/${encodeURIComponent(n.title)}">${escapeHtml(n.title)}</a>
+              ${n.tags.length ? `<div class="row-tags">${n.tags.map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>` : ""}
+            </td>
+            <td class="length"><div class="length-cell">
+              <span class="length-bar"><span style="width:${(n.words / max) * 100}%"></span></span>
+              <span class="length-num">${n.words.toLocaleString()}</span>
+            </div></td>
             <td class="num">${n.reading_minutes} min</td>
+            <td class="num muted-cell" title="${escapeHtml(formatDate(n.modified))}">${timeAgo(n.modified)}</td>
           </tr>`,
         )
         .join("")
-    : `<tr><td colspan="3" class="none">No notes yet — create one to see statistics.</td></tr>`;
+    : `<tr><td colspan="5" class="none">No notes yet — create one to see statistics.</td></tr>`;
 }
 
 async function loadReports() {
@@ -278,7 +356,7 @@ async function openStats() {
   try {
     const stats = await api("GET", `/api/stats?tz_offset=${tzOffset()}`);
     $("stats-meta").textContent = "Updated: " + formatDate(stats.generated);
-    renderStatCards(stats.summary);
+    renderStatCards(stats);
     renderActivity(stats.activity);
     renderRankList("top-tags", stats.top_tags, (t) => "#" + t.tag);
     renderRankList("top-words", stats.top_words, (w) => w.word);
@@ -390,6 +468,17 @@ $("cancel-btn").onclick = () =>
 
 $("edit-content").oninput = () => {
   $("edit-preview").innerHTML = renderMarkdown($("edit-content").value);
+  updateEditCount();
+};
+
+$("empty-new-btn").onclick = () => openEditor(null);
+
+// Clicking a tag under a note's title filters the sidebar by that tag.
+$("view-meta").onclick = (e) => {
+  const button = e.target.closest(".meta-tag");
+  if (!button) return;
+  state.tag = button.dataset.tag;
+  loadList();
 };
 
 let searchTimer;
