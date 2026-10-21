@@ -179,7 +179,13 @@ def create_note(note: NoteIn):
     path = note_path(note.title)
     if path.exists():
         raise HTTPException(409, "A note with this title already exists.")
-    path.write_text(note.content, encoding="utf-8")
+    try:
+        with path.open("x", encoding="utf-8") as note_file:
+            note_file.write(note.content)
+    except FileExistsError as err:
+        raise HTTPException(
+            409, "A note with this title already exists."
+        ) from err
     return {**note_info(path, note.content), "content": note.content}
 
 
@@ -539,7 +545,13 @@ def wiki_import(item: WikiImport):
     if path.exists():
         raise HTTPException(409, f'A note called "{title}" already exists.')
     content = wiki_note_content(summary, title)
-    path.write_text(content, encoding="utf-8")
+    try:
+        with path.open("x", encoding="utf-8") as note_file:
+            note_file.write(content)
+    except FileExistsError as err:
+        raise HTTPException(
+            409, f'A note called "{title}" already exists.'
+        ) from err
     return {**note_info(path, content), "content": content}
 
 
