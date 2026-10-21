@@ -26,13 +26,11 @@ from pydantic import BaseModel
 # app/), so the app works the same no matter where it is started from.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-NOTES_DIR = Path(os.environ.get("NOTES_DIR", PROJECT_ROOT / "data")).resolve()
+NOTES_DIR = (PROJECT_ROOT / os.environ.get("NOTES_DIR", "data")).resolve()
 NOTES_DIR.mkdir(parents=True, exist_ok=True)
 
 # Saved analytics reports (Markdown files), stored on the same disk as notes.
-REPORTS_DIR = Path(
-    os.environ.get("REPORTS_DIR", PROJECT_ROOT / "reports")
-).resolve()
+REPORTS_DIR = (PROJECT_ROOT / os.environ.get("REPORTS_DIR", "reports")).resolve()
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Optional login. If APP_PASSWORD is empty, the app is open to everyone.
