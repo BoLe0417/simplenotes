@@ -1,22 +1,23 @@
 /*
- * SimpleNotes visual style: "study notebook with a highlighter".
- * Quiet ink-blue on paper; the yellow highlighter marks whatever is
- * currently selected (note, tag, page) - the one bright thing on screen.
+ * SimpleNotes visual style: SMU colours.
+ * SMU Blue (#141C52) is the ink and the main action colour; SMU Gold
+ * (#8A704C) marks whatever is currently selected (note, tag, page).
+ * Brand colours from https://www.smu.edu.sg/node/6631
  */
 
 :root {
   --paper: #ffffff;
-  --desk: #eef1f6;
-  --ink: #1b2a4a;
-  --ink-soft: #55627a;
-  --rule: #d8dde7;
-  --pen: #2c55c7;
+  --desk: #f2f3f7;
+  --ink: #141c52; /* SMU Blue */
+  --ink-soft: #5b6180;
+  --rule: #dcdfe8;
+  --pen: #141c52; /* SMU Blue */
   --pen-text: #ffffff;
-  --highlight: #ffe45c;
-  --highlight-ink: #1b2a4a;
-  --swipe: #ffe45c;
-  --danger: #c2362b;
-  --code-bg: #f1f3f8;
+  --highlight: #8a704c; /* SMU Gold */
+  --highlight-ink: #ffffff;
+  --swipe: rgb(138 112 76 / 0.3);
+  --danger: #b4322a;
+  --code-bg: #f1f2f7;
 
   --font-ui: "Public Sans", system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
   --font-read: "Source Serif 4", Georgia, "Songti SC", "SimSun", serif;
@@ -32,18 +33,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #151b27;
-    --desk: #1c2433;
-    --ink: #e4e9f2;
-    --ink-soft: #9aa5b8;
-    --rule: #2c3648;
-    --pen: #7ea2ff;
-    --pen-text: #0f1626;
-    --highlight: #e8c93a;
-    --highlight-ink: #151b27;
-    --swipe: rgb(232 201 58 / 0.4);
-    --danger: #ff7a6e;
-    --code-bg: #212a3a;
+    /* SMU Blue as the background; lighter blue and gold so they stay readable */
+    --paper: #0f1433;
+    --desk: #161c40;
+    --ink: #e9ebf4;
+    --ink-soft: #a4a9c4;
+    --rule: #2a3160;
+    --pen: #a9b8f0;
+    --pen-text: #0f1433;
+    --highlight: #c4a575;
+    --highlight-ink: #0f1433;
+    --swipe: rgb(196 165 117 / 0.35);
+    --danger: #ff8a7e;
+    --code-bg: #1b2248;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 18px rgb(0 0 0 / 0.25);
     color-scheme: dark;
   }
