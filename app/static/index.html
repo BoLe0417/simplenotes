@@ -175,6 +175,34 @@
           <header class="panel-head"><h2>Previous reports</h2></header>
           <div id="reports-box" class="reports-box"></div>
         </section>
+
+        <section class="panel">
+          <header class="panel-head">
+            <h2>Find notes in the database <small>SQL query on the note metadata table</small></h2>
+          </header>
+          <form id="db-form" class="db-form">
+            <input id="db-tag" list="db-tag-list" placeholder="Tag, e.g. ds600" aria-label="Tag" autocomplete="off" />
+            <datalist id="db-tag-list"></datalist>
+            <select id="db-source" aria-label="Source">
+              <option value="">Any source</option>
+              <option value="own">Own notes</option>
+              <option value="wikipedia">Wikipedia</option>
+            </select>
+            <button type="submit" class="primary">Show</button>
+            <button type="button" id="db-clear">Clear</button>
+          </form>
+          <div class="db-query">
+            <span class="db-query-label">SQL that ran</span>
+            <pre id="db-sql"></pre>
+          </div>
+          <p id="db-summary" class="db-summary"></p>
+          <table class="stats-table db-table">
+            <thead>
+              <tr><th>Note</th><th>Source</th><th class="num">Modified</th></tr>
+            </thead>
+            <tbody id="db-results"></tbody>
+          </table>
+        </section>
       </section>
     </main>
 
