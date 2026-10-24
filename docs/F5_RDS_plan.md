@@ -18,7 +18,45 @@
 
 **不做**：CSV 导入导出、复杂多条件、界面大改。
 
-## 2. 分工建议（三块，互不冲突）
+## 2. 我们的数据库是什么
+
+**Amazon RDS，引擎用 MySQL。**
+
+| | 是什么 |
+|---|---|
+| 数据库服务 | Amazon RDS（AWS 托管的关系型数据库，Lesson 8 / Module 8 讲的就是它；打补丁、备份由 AWS 负责） |
+| 数据库引擎 | MySQL |
+| 规格 | `db.t3.micro`，20 GB 存储，单可用区，不开自动备份（课堂项目够用，也省钱） |
+| 放在哪 | VPC 的两个私有子网里，只有 EC2 能连（3306 端口），外网访问不到 |
+| 数据库名 | `simplenotes` |
+| 里面存什么 | 一张表 `notes`，每篇笔记一行：标题、标签、来源（自己写的 / Wikipedia）、修改日期、文件名 |
+| 怎么创建 | 写在同一个 CloudFormation YAML 里，和 EC2 一起建 |
+
+**笔记正文不在数据库里**，还是 `.md` 文件存在 EC2 的 EBS 硬盘上。数据库只存"关于笔记的信息"，用来做筛选。和老师的 Nimbus 一样：文件在 EBS，元数据在 RDS。
+
+**本地开发不需要 RDS**：在自己电脑上跑时，代码会自动用一个本地 SQLite 文件（`notes.db`）代替，SQL 写法一样。那只是开发时的替身，**正式部署和展示用的都是 RDS MySQL**。
+
+**在笔记 app 里有什么用**：帮用户更快找到笔记。比如期末复习时"只看 DS600 的笔记"（按标签）、"只看从 Wikipedia 导入的资料"（按来源），每个筛选就是一条 SQL 查询。
+
+**和课程的对应**（展示时可以讲）：
+
+| 我们做的 | Lesson 8 slides | 课程模块 |
+|---|---|---|
+| 用 Amazon RDS（MySQL） | 第 3 页 | Module 8 Databases |
+| 表结构：title / tags / source / modified / filename | 第 9 页 DB Schema | Module 8 |
+| 文件存 EBS，元数据存 RDS | 第 8 页 | Module 7 + 8 |
+| 保存 → `INSERT`，筛选 → `SELECT ... WHERE` | 第 10–11 页 | Module 8 SQL |
+| 数据库在私有子网，只允许 EC2 安全组连 3306 | 第 6、13 页 | Module 4 安全 + Module 5 网络 |
+| app 用 Endpoint / 数据库名 / 用户名 / 密码连 RDS | 第 12 页 | Lab: Build your DB server |
+| RDS 写进同一个 CloudFormation YAML | 第 2、12 页 | IaC |
+
+模板里一直没用上的两个私有子网，这次正好用来放数据库（RDS 要求子网分布在至少两个可用区，模板里刚好有）。网络设计从 Lesson 5 一路用到 Lesson 8。
+
+一句话英文版：
+
+> "Our database is Amazon RDS for MySQL, running in the private subnets of our VPC. It stores the metadata of every note, while the note files themselves stay on EBS."
+
+## 3. 分工建议（三块，互不冲突）
 
 | 部分 | 改哪些文件 | 谁 |
 |---|---|---|
@@ -30,7 +68,7 @@
 
 ---
 
-## 3. 表结构
+## 4. 表结构
 
 一张表 `notes`：
 
@@ -53,15 +91,15 @@ SELECT title, tags, source, modified FROM notes WHERE tags LIKE '%ds600%';
 
 ---
 
-## 4. A. 后端
+## 5. A. 后端
 
-### 4.1 `requirements.txt` 加一行
+### 5.1 `requirements.txt` 加一行
 
 ```
 pymysql==1.1.1
 ```
 
-### 4.2 新建 `app/db.py`
+### 5.2 新建 `app/db.py`
 
 本地开发**没有 RDS 也能跑**：没设置 `DB_HOST` 时自动用一个 SQLite 文件（`notes.db`），SQL 一样。到 AWS 上设置了 `DB_HOST` 就连 RDS（MySQL）。
 
@@ -165,7 +203,7 @@ def find_notes(tag="", source=""):
 
 为什么用 `{P}` 占位、把值放在 `params` 里，而不是直接拼字符串？**防 SQL 注入**。老师问到可以这么答。
 
-### 4.3 改 `app/main.py`
+### 5.3 改 `app/main.py`
 
 **(1) 开头 import：**
 
@@ -218,7 +256,7 @@ def db_find_notes(tag: str = "", source: str = ""):
 
 **(6) `.gitignore` 加一行**：`notes.db`（本地 SQLite 文件不要上传）。
 
-### 4.4 自测（本地）
+### 5.4 自测（本地）
 
 ```
 .\.venv\Scripts\activate
@@ -235,9 +273,9 @@ uvicorn app.main:app --reload --port 8000
 
 ---
 
-## 5. B. 前端：Stats 页加一个筛选框
+## 6. B. 前端：Stats 页加一个筛选框
 
-### 5.1 `index.html`：在 Stats 页（`<section id="stats">`）最后、`Previous reports` 后面加：
+### 6.1 `index.html`：在 Stats 页（`<section id="stats">`）最后、`Previous reports` 后面加：
 
 ```html
 <section class="panel">
@@ -256,7 +294,7 @@ uvicorn app.main:app --reload --port 8000
 </section>
 ```
 
-### 5.2 `app.js`：加在其他事件绑定旁边
+### 6.2 `app.js`：加在其他事件绑定旁边
 
 ```javascript
 $("db-form").onsubmit = async (e) => {
@@ -283,11 +321,11 @@ $("db-form").onsubmit = async (e) => {
 
 ---
 
-## 6. C. 部署：在 `scripts/simplenotes.yaml` 加 RDS
+## 7. C. 部署：在 `scripts/simplenotes.yaml` 加 RDS
 
 和 Lesson 8 的 Lab 一样：**数据库放在私有子网，只允许 EC2 的安全组连 3306 端口**。我们模板里本来就有两个没用上的私有子网（两个可用区），正好给 RDS 用（RDS 的子网组要求至少两个可用区）。
 
-### 6.1 `Parameters` 加一个密码参数
+### 7.1 `Parameters` 加一个密码参数
 
 ```yaml
   DBPassword:
@@ -297,7 +335,7 @@ $("db-form").onsubmit = async (e) => {
     Description: Password for the RDS database (at least 8 characters)
 ```
 
-### 6.2 `Resources` 加三个资源（放在 `WebSecurityGroup` 后面）
+### 7.2 `Resources` 加三个资源（放在 `WebSecurityGroup` 后面）
 
 ```yaml
   DBSecurityGroup:
@@ -337,7 +375,7 @@ $("db-form").onsubmit = async (e) => {
       BackupRetentionPeriod: 0
 ```
 
-### 6.3 改 `WebServer1`
+### 7.3 改 `WebServer1`
 
 **(1)** `DependsOn` 加上数据库，让 EC2 等数据库建好再开机（这样 User Data 能拿到数据库地址）：
 
@@ -358,7 +396,7 @@ $("db-form").onsubmit = async (e) => {
 
 （User Data 已经是 `!Sub`，所以 `${NotesDatabase.Endpoint.Address}` 会被换成真实地址。）
 
-### 6.4 `Outputs` 可以加一个（方便展示时给老师看）
+### 7.4 `Outputs` 可以加一个（方便展示时给老师看）
 
 ```yaml
   DatabaseEndpoint:
@@ -366,20 +404,20 @@ $("db-form").onsubmit = async (e) => {
     Value: !GetAtt NotesDatabase.Endpoint.Address
 ```
 
-### 6.5 部署时的变化
+### 7.5 部署时的变化
 - 创建 stack 时 Parameters 页多一个 **DBPassword**，填一个至少 8 位的密码（不要用真实常用密码）。
 - **RDS 创建要 10 分钟左右**，整个 stack 大概 15–20 分钟。展示当天提前建。
 - **RDS 按小时收费，用完一定删 stack。**
 - 如果 Learner Lab 报错说实例类型不允许，把 `db.t3.micro` 换成 Lab 里允许的类型（比如 `db.t4g.micro`）。
 
-### 6.6 AWS 上验证
+### 7.6 AWS 上验证
 1. 打开 AppURL → Stats → 最下面的 "Find notes in the database"，选 Wikipedia → Show，应该显示 SQL 和结果。
 2. 也可以直接访问 `http://<AppURL>/api/db/notes`。
 3. 打不开就看 EC2 的 system log；数据库连不上通常是安全组或密码填错。
 
 ---
 
-## 7. 展示时怎么讲（英文，可直接用）
+## 8. 展示时怎么讲（英文，可直接用）
 
 > For F5 we followed the Nimbus pattern from Lesson 8. Note files stay on EBS, and an Amazon RDS MySQL database keeps one row of metadata per note: title, tags, source and date. Saving a note runs an INSERT, deleting runs a DELETE, and the "Find notes" box on the Stats page runs a SELECT with a WHERE clause, which we show on screen. RDS sits in the two private subnets of our VPC, and its security group only accepts port 3306 from the web server's security group, so the database is not reachable from the internet. RDS is created by the same CloudFormation template, and the app gets the database endpoint through User Data.
 
@@ -388,7 +426,7 @@ $("db-form").onsubmit = async (e) => {
 - **为什么放私有子网？** 数据库不需要被外网访问，只让 EC2 连，更安全（Module 4、5）。
 - **密码怎么给 app？** CloudFormation 参数（NoEcho，不显示）→ User Data → systemd 环境变量。真实项目会用 Secrets Manager，课堂项目这样够用。
 
-## 8. 完成清单
+## 9. 完成清单
 
 - [ ] A：`app/db.py` + `main.py` 5 处 + `requirements.txt` + `.gitignore`，本地自测通过
 - [ ] B：Stats 页筛选框，本地点 Show 能看到 SQL 和结果
