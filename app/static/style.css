@@ -1317,6 +1317,86 @@ kbd {
   color: var(--ink-soft);
 }
 
+/* F5: database search */
+.db-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.db-form input,
+.db-form select {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.db-form input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.db-form input:focus,
+.db-form select:focus {
+  outline: none;
+  border-color: var(--pen);
+  box-shadow: 0 0 0 3px var(--tint);
+}
+
+.db-query {
+  margin-top: 16px;
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.db-query-label {
+  display: block;
+  padding: 7px 14px 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+#db-sql {
+  margin: 0;
+  padding: 6px 14px 12px;
+  font-family: var(--font-code);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#db-sql:empty::before {
+  content: "Press Show to run a query.";
+  color: var(--ink-soft);
+}
+
+.db-summary {
+  margin: 14px 0 4px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.source-badge {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--track);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.source-badge.source-wikipedia {
+  background: var(--tint);
+  color: var(--pen);
+}
+
 @media (max-width: 1100px) {
   .stat-cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));

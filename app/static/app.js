@@ -365,6 +365,54 @@ async function openStats() {
     toast(err.message);
   }
   loadReports();
+  loadDbTagOptions();
+  findNotesInDb();
+}
+
+// ---------- F5: find notes with a SQL query (Amazon RDS on AWS) ----------
+
+const SOURCE_LABELS = { own: "Own note", wikipedia: "Wikipedia" };
+
+async function findNotesInDb() {
+  const params = new URLSearchParams({ tag: $("db-tag").value.trim(), source: $("db-source").value });
+  $("db-summary").textContent = "Running query…";
+  try {
+    const result = await api("GET", `/api/db/notes?${params}`);
+    // Show the parameter values next to the placeholders, so the WHERE clause is easy to read.
+    $("db-sql").textContent = result.params.length
+      ? `${result.sql};\n-- values: ${result.params.map((p) => `'${p}'`).join(", ")}`
+      : `${result.sql};`;
+    $("db-summary").textContent = `${result.rows.length} row${result.rows.length === 1 ? "" : "s"} returned`;
+    $("db-results").innerHTML = result.rows.length
+      ? result.rows
+          .map((r) => {
+            const tags = (r.tags || "").split(",").filter(Boolean);
+            return `
+          <tr>
+            <td>
+              <a href="#/note/${encodeURIComponent(r.title)}">${escapeHtml(r.title)}</a>
+              ${tags.length ? `<div class="row-tags">${tags.map((t) => `<span>#${escapeHtml(t)}</span>`).join("")}</div>` : ""}
+            </td>
+            <td><span class="source-badge source-${escapeHtml(r.source)}">${escapeHtml(SOURCE_LABELS[r.source] || r.source)}</span></td>
+            <td class="num muted-cell">${escapeHtml(r.modified)}</td>
+          </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="3" class="none">No notes match. Try another tag or source.</td></tr>`;
+  } catch (err) {
+    $("db-sql").textContent = "";
+    $("db-summary").textContent = err.message;
+    $("db-results").innerHTML = "";
+  }
+}
+
+async function loadDbTagOptions() {
+  try {
+    const tags = await api("GET", "/api/tags");
+    $("db-tag-list").innerHTML = tags.map((t) => `<option value="${escapeHtml(t.tag)}"></option>`).join("");
+  } catch {
+    // The tag suggestions are optional; typing a tag still works.
+  }
 }
 
 async function saveReport() {
@@ -456,6 +504,15 @@ $("new-btn").onclick = () => openEditor(null);
 $("edit-btn").onclick = () => openEditor(state.current);
 $("delete-btn").onclick = remove;
 $("save-report-btn").onclick = saveReport;
+$("db-form").onsubmit = (e) => {
+  e.preventDefault();
+  findNotesInDb();
+};
+$("db-clear").onclick = () => {
+  $("db-tag").value = "";
+  $("db-source").value = "";
+  findNotesInDb();
+};
 $("wiki-form").onsubmit = searchWiki;
 $("wiki-results").onclick = (e) => {
   const button = e.target.closest(".wiki-save");
