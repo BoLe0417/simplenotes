@@ -14,13 +14,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from app import db
 
 # Folders are resolved relative to the project root (the folder that contains
 # app/), so the app works the same no matter where it is started from.
@@ -130,6 +132,20 @@ def all_notes() -> list[tuple[Path, str]]:
     ]
 
 
+def record_note(path: Path, content: str) -> None:
+    """Keep the database row for this note in step with its file."""
+    source = "wikipedia" if "#wikipedia" in content else "own"
+    modified = date.fromtimestamp(path.stat().st_mtime).isoformat()
+    db.save_note_row(path.name, path.stem, get_tags(content), source, modified)
+
+
+@app.on_event("startup")
+def setup_database():
+    db.init_db()
+    for path, content in all_notes():
+        record_note(path, content)
+
+
 # ---------- API ----------
 
 
@@ -186,6 +202,7 @@ def create_note(note: NoteIn):
         raise HTTPException(
             409, "A note with this title already exists."
         ) from err
+    record_note(path, note.content)
     return {**note_info(path, note.content), "content": note.content}
 
 
@@ -201,7 +218,9 @@ def update_note(title: str, note: NoteIn):
                 409, "A note with this title already exists."
             )
         old_path.rename(new_path)
+        db.delete_note_row(old_path.name)
     new_path.write_text(note.content, encoding="utf-8")
+    record_note(new_path, note.content)
     return {**note_info(new_path, note.content), "content": note.content}
 
 
@@ -211,6 +230,16 @@ def delete_note(title: str):
     if not path.exists():
         raise HTTPException(404, "Note not found.")
     path.unlink()
+    db.delete_note_row(path.name)
+
+
+@app.get("/api/db/notes")
+def db_find_notes(tag: str = "", source: str = ""):
+    """Filter notes with a SQL query on the metadata table (F5)."""
+    try:
+        return db.find_notes(tag.strip().lower().lstrip("#"), source.strip())
+    except Exception as err:
+        raise HTTPException(503, f"Database error: {err}") from err
 
 
 # ---------- Analytics ----------
@@ -552,6 +581,7 @@ def wiki_import(item: WikiImport):
         raise HTTPException(
             409, f'A note called "{title}" already exists.'
         ) from err
+    record_note(path, content)
     return {**note_info(path, content), "content": content}
 
 
